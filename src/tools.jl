@@ -8,14 +8,32 @@ Signal to noise ratio of cross-correlations in matrix `A` with `fs'.
 
 Follows method of Clarke et. al, 2011. Measures SNR at each point.
 """
-function snr(A::AbstractArray,fs::Real)
+function snr(A::AbstractArray,fs::Real; smooth::Bool=true)
     t,N = size(A)
     A_mean = mean(A,dims=2)
 
     # calculate noise and envelope functions
     sigma = mean(A.^2,dims=2) .- A_mean.^2
     sigma = sqrt.(sigma./ (N-1))
-    return sigma
+
+    S = abs.(A_mean .+ hilbert(A_mean)im)
+
+    # smooth noise and envelope functions with a 10s sliding cosine window
+    if smooth
+        # define 10s cosine window
+        win_n = convert(Int64, 10*fs)
+        cos_win = cosine(win_n, zerophase=true)
+        cos_win = convert.(eltype(sigma), cos_win)
+
+        # convolve cosine window with signal or noise
+        sigma = conv(cos_win, sigma[:,1])
+        S = conv(cos_win, S[:,1])
+    end
+
+    # compute signal to noise ratio at each point
+    SNR = S ./ sigma
+
+    return SNR
 end
 snr(C::CorrData) = snr(C.corr,C.fs)
 
